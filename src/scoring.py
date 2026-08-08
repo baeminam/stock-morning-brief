@@ -41,26 +41,33 @@ def build_composite(tech_df: pd.DataFrame, fund_df: pd.DataFrame, scoring_config
     return df
 
 
+COUNTRY_ORDER = ["KR", "US", "JP"]
+
+
 def rank_picks(composite_df: pd.DataFrame, scoring_config: dict) -> dict:
     """
-    Pick top stocks for short-term / long-term horizons and summarize by market.
-    Returns dict with keys: short_term, long_term, markets (all DataFrames).
+    Pick top stocks per country for short-term / long-term horizons.
+    Returns {"short": {country: df}, "long": {country: df}, "markets": df}.
     """
     rank_cfg = scoring_config.get("ranking", {})
     n_short = rank_cfg.get("short_term_top_n", 10)
     n_long = rank_cfg.get("long_term_top_n", 10)
 
-    result = {"short_term": pd.DataFrame(), "long_term": pd.DataFrame(), "markets": pd.DataFrame()}
+    result = {"short": {}, "long": {}, "markets": pd.DataFrame()}
     if composite_df.empty:
         return result
 
-    result["short_term"] = composite_df.sort_values(
-        ["short_term_score", "composite_score"], ascending=False
-    ).head(n_short)
+    for country, g in composite_df.groupby("country"):
+        result["short"][country] = g.sort_values(
+            ["short_term_score", "composite_score"], ascending=False
+        ).head(n_short)
+        result["long"][country] = g.sort_values(
+            ["long_term_score", "composite_score"], ascending=False
+        ).head(n_long)
 
-    result["long_term"] = composite_df.sort_values(
-        ["long_term_score", "composite_score"], ascending=False
-    ).head(n_long)
+    # stable country display order
+    result["short"] = {c: result["short"][c] for c in COUNTRY_ORDER if c in result["short"]}
+    result["long"] = {c: result["long"][c] for c in COUNTRY_ORDER if c in result["long"]}
 
     markets = (
         composite_df.groupby("country")
@@ -95,6 +102,7 @@ if __name__ == "__main__":
     comp = build_composite(tech, fund, {})
     print(comp)
     picks = rank_picks(comp, {"ranking": {"short_term_top_n": 2, "long_term_top_n": 2}})
-    for k, v in picks.items():
-        print(f"--- {k} ---")
-        print(v)
+    for horizon in ("short", "long"):
+        for country, df in picks[horizon].items():
+            print(f"--- {horizon}/{country} ---")
+            print(df[["ticker", "composite_score"]])

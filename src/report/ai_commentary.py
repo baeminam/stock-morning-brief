@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.3-70b-versatile"
-MODEL_LABEL = "Llama 3.3 70B (Groq 묣 티어)"
+MODEL_LABEL = "Llama 3.3 70B (Groq 무료 티어)"
 
 
 def is_available() -> bool:
@@ -73,9 +73,10 @@ def _call_groq(prompt: str, api_key: str, timeout: int = 30) -> str | None:
         return None
 
 
-def generate_commentary(short_recs: list[dict], long_recs: list[dict], sleep_sec: float = 0.5) -> dict:
+def generate_commentary(picks: dict, sleep_sec: float = 0.5) -> dict:
     """
-    Generate AI commentary for recommended stocks.
+    Generate AI commentary for all per-country picks.
+    picks: {"short": {country: df}, "long": {country: df}, ...}
     Returns {(ticker, horizon): commentary_text}. Empty dict when unavailable.
     """
     api_key = os.environ.get("GROQ_API_KEY")
@@ -85,12 +86,13 @@ def generate_commentary(short_recs: list[dict], long_recs: list[dict], sleep_sec
 
     tasks = []
     seen = set()
-    for horizon, recs in (("short", short_recs), ("long", long_recs)):
-        for rec in recs:
-            key = (rec.get("ticker"), horizon)
-            if key not in seen:
-                seen.add(key)
-                tasks.append((key, rec, horizon))
+    for horizon in ("short", "long"):
+        for country, df in picks.get(horizon, {}).items():
+            for rec in df.to_dict("records"):
+                key = (rec.get("ticker"), horizon)
+                if key not in seen:
+                    seen.add(key)
+                    tasks.append((key, rec, horizon))
 
     logger.info("Generating AI commentary for %d stock-horizon pairs", len(tasks))
     out = {}
@@ -103,6 +105,56 @@ def generate_commentary(short_recs: list[dict], long_recs: list[dict], sleep_sec
     return out
 
 
+def translate_jp_names(picks: dict) -> int:
+    """
+    Translate Japanese company names in JP picks to Korean via one batched
+    Groq call. Mutates the DataFrames in place. Returns number translated.
+    """
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return 0
+
+    names = set()
+    for horizon in ("short", "long"):
+        df = picks.get(horizon, {}).get("JP")
+        if df is not None and not df.empty:
+            names.update(df["name"].astype(str))
+    if not names:
+        return 0
+
+    import json
+
+    name_list = sorted(names)
+    prompt = (
+        "다음은 일본 기업명 목록입니다. 각각 한국어 표기(한국에서 통용되는 이름, "
+        "없으면 자연스러운 음역)로 번역해서, 입력과 같은 순서의 JSON 배열로만 답해 주세요. "
+        "다른 설명 없이 JSON 목록만 출력하세요.\n\n" + json.dumps(name_list, ensure_ascii=False)
+
+    )
+    text = _call_groq(prompt, api_key)
+    if not text:
+        return 0
+
+    try:
+        start = text.index("[")
+        end = text.rindex("]") + 1
+        translated = json.loads(text[start:end])
+        mapping = {ja: ko for ja, ko in zip(name_list, translated) if isinstance(ko, str)}
+    except Exception as e:
+        logger.warning("JP name translation parse failed: %s", e)
+        return 0
+
+    count = 0
+    for horizon in ("short", "long"):
+        df = picks.get(horizon, {}).get("JP")
+        if df is not None and not df.empty:
+            before = df["name"].copy()
+            df["name"] = df["name"].astype(str).map(lambda n: mapping.get(n, n))
+            count += int((before != df["name"]).sum())
+    logger.info("JP names translated to Korean: %d rows", count)
+    return count
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     sample = {
@@ -111,4 +163,8 @@ if __name__ == "__main__":
         "vol_ratio": 1.8, "technical_score": 68.0, "fundamental_score": 74.0,
         "composite_score": 71.6, "target_gap_pct": 15.2, "consensus_score": 4.2,
     }
-    print(generate_commentary([sample], [sample]))
+    import pandas as pd
+
+    df = pd.DataFrame([sample])
+    picks = {"short": {"KR": df}, "long": {"KR": df}}
+    print(generate_commentary(picks))

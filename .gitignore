@@ -38,6 +38,7 @@ data/*.csv
 data/*.db
 data/*.json
 data/*.html
+data/*.pdf
 *.log
 
 # Secrets

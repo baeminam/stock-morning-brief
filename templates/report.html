@@ -2,104 +2,132 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>증시 모닝 브리프 - {{ report_date }}</title>
-<style>
-  body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; color: #222; max-width: 900px; margin: 0 auto; padding: 20px; }
-  h1 { font-size: 22px; border-bottom: 3px solid #1a73e8; padding-bottom: 8px; }
-  h2 { font-size: 17px; color: #1a73e8; margin-top: 28px; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: right; }
-  th { background: #f4f7fb; text-align: center; }
-  td:first-child, td:nth-child(2) { text-align: left; }
-  .up { color: #d32f2f; }
-  .down { color: #1976d2; }
-  .note { font-size: 12px; color: #888; margin-top: 24px; }
-  .summary { background: #f4f7fb; padding: 12px 16px; border-radius: 6px; font-size: 14px; }
-  .summary ul { margin: 6px 0 0 0; padding-left: 18px; }
-  .reason td { background: #fafbfc; color: #555; font-size: 12px; text-align: left !important; border-top: none; }
-  .reason.ai td { background: #eef5ff; color: #1a4a8a; }
-</style>
+<title>일일 종목 분석 리포트 - {{ report_date }}</title>
 </head>
-<body>
-<h1>증시 모닝 브리프 ({{ report_date }})</h1>
+<body style="margin:0; padding:0; background:#f0f2f5; font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;">
+<div style="max-width:920px; margin:0 auto; padding:20px;">
 
-<div class="summary">
-  <b>분석 대상</b>
-  <ul>
-    {% for n in universe_notes %}
-    <li>{{ n }}</li>
+  <!-- 헤더 -->
+  <div style="background:#1a73e8; color:#ffffff; padding:18px 24px; border-radius:8px 8px 0 0;">
+    <div style="font-size:20px; font-weight:bold;">일일 종목 분석 리포트</div>
+    <div style="font-size:13px; opacity:0.9; margin-top:4px;">{{ report_date }} 기준 · 한국/미국/일본 {{ total_count }}개 종목 분석</div>
+  </div>
+
+  <!-- 요약 -->
+  <div style="background:#ffffff; padding:16px 24px; border-left:1px solid #ddd; border-right:1px solid #ddd;">
+    <div style="font-size:14px; font-weight:bold; color:#1a73e8; margin-bottom:8px;">분석 대상</div>
+    <ul style="margin:0; padding-left:18px; font-size:13px; color:#333;">
+      {% for n in universe_notes %}
+      <li style="margin-bottom:4px;">{{ n }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- 추천 섹션 (단기/장기 × 국가별) -->
+  {% for sec in sections %}
+  <div style="background:#ffffff; padding:16px 24px; border-left:1px solid #ddd; border-right:1px solid #ddd; {{ 'border-top:1px solid #eee;' if not loop.first }}">
+    <div style="font-size:16px; font-weight:bold; color:{{ sec.color }}; border-left:4px solid {{ sec.color }}; padding-left:8px; margin-bottom:10px;">
+      {{ sec.title }} <span style="font-size:12px; color:#888; font-weight:normal;">({{ sec.subtitle }}) · 국가별 Top 10</span>
+    </div>
+    {% for g in sec.groups %}
+    <div style="font-size:14px; font-weight:bold; color:#333; margin:14px 0 8px 0; padding:4px 10px; background:#f4f7fb; border-radius:4px;">
+      {{ g.label }} ({{ g.country }})
+    </div>
+    {% for r in g.records %}
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e0e0e0; border-radius:6px; margin-bottom:12px; font-size:13px;">
+      <tr>
+        <td style="padding:10px 12px; background:{{ sec.head_bg }}; border-bottom:1px solid #eee;">
+          <span style="display:inline-block; background:{{ sec.color }}; color:#fff; font-size:11px; padding:1px 6px; border-radius:3px; margin-right:6px;">{{ loop.index }}</span>
+          <b style="font-size:14px;">{{ r.name }}</b>
+          <span style="color:#888; font-size:12px;">{{ r.ticker }}</span>
+          <span style="float:right; font-size:15px; font-weight:bold; color:#1a73e8;">{{ r.composite_score }}점</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px; color:#333;">
+          {% if sec.key == 'short' %}
+          종가 <b>{{ fmt_price(r.close, r.country) }}</b> ·
+          5일 <font color="{{ '#d32f2f' if (r.ret_5d or 0) >= 0 else '#1976d2' }}">{{ fmt_pct(r.ret_5d) }}</font> ·
+          20일 <font color="{{ '#d32f2f' if (r.ret_20d or 0) >= 0 else '#1976d2' }}">{{ fmt_pct(r.ret_20d) }}</font> ·
+          RSI {{ fmt_num(r.rsi14) }} · 거래량 {{ fmt_num(r.vol_ratio) }}배
+          {% else %}
+          종가 <b>{{ fmt_price(r.close, r.country) }}</b> ·
+          20일 <font color="{{ '#d32f2f' if (r.ret_20d or 0) >= 0 else '#1976d2' }}">{{ fmt_pct(r.ret_20d) }}</font> ·
+          60일 <font color="{{ '#d32f2f' if (r.ret_60d or 0) >= 0 else '#1976d2' }}">{{ fmt_pct(r.ret_60d) }}</font> ·
+          목표가 괴리 {{ fmt_pct(r.target_gap_pct) }} · 컨센서스 {{ fmt_num(r.consensus_score) }}/5
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px; color:#555; font-size:12px; border-top:1px dashed #eee;">
+          추천 사유 — {{ r.reasons | join(' / ') }}
+        </td>
+      </tr>
+      {% if r.ai_comment %}
+      <tr>
+        <td style="padding:8px 12px; background:#eef5ff; color:#1a4a8a; font-size:12px; border-radius:0 0 6px 6px;">
+          <b>AI 해설</b> — {{ r.ai_comment }}
+        </td>
+      </tr>
+      {% endif %}
+    </table>
     {% endfor %}
-  </ul>
-  종합 점수 = 기술적 {{ (tech_ratio * 100) | round | int }}% + 기본적 {{ (fund_ratio * 100) | round | int }}%
-  (기술: RSI·MACD·이동평균·볼린저·거래량 / 기본: IB의견·목표가·뉴스감성·시장모멘텀)
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <!-- 시장별 강도 -->
+  <div style="background:#ffffff; padding:16px 24px; border-left:1px solid #ddd; border-right:1px solid #ddd; border-top:1px solid #eee;">
+    <div style="font-size:16px; font-weight:bold; color:#1a73e8; border-left:4px solid #1a73e8; padding-left:8px; margin-bottom:10px;">시장별 강도</div>
+    <table width="100%" cellpadding="6" cellspacing="0" style="border-collapse:collapse; font-size:13px;">
+      <tr style="background:#f4f7fb;">
+        <th style="border:1px solid #ddd; text-align:left;">시장</th>
+        <th style="border:1px solid #ddd;">종목 수</th>
+        <th style="border:1px solid #ddd;">평균 종합점수</th>
+        <th style="border:1px solid #ddd;">평균 20일 수익률</th>
+      </tr>
+      {% for m in markets %}
+      <tr>
+        <td style="border:1px solid #ddd;">{{ m.country }}</td>
+        <td style="border:1px solid #ddd; text-align:center;">{{ m.count }}</td>
+        <td style="border:1px solid #ddd; text-align:center;">{{ m.avg_composite }}</td>
+        <td style="border:1px solid #ddd; text-align:center; color:{{ '#d32f2f' if (m.avg_ret_20d or 0) >= 0 else '#1976d2' }};">{{ fmt_pct(m.avg_ret_20d) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <!-- 점수 산정 방식 -->
+  <div style="background:#ffffff; padding:16px 24px; border-left:1px solid #ddd; border-right:1px solid #ddd; border-top:1px solid #eee;">
+    <div style="font-size:16px; font-weight:bold; color:#666; border-left:4px solid #999; padding-left:8px; margin-bottom:10px;">종합 점수 산정 방식</div>
+    <div style="font-size:12px; color:#555; line-height:1.8;">
+      <b>1. 기술적 점수 (0~100점)</b> — 최근 120일 주가·거래량으로 계산한 지표를 각각 0~100점으로 환산한 뒤 가중합합니다.<br>
+      &nbsp;&nbsp;· RSI(14) — 가중치 {{ method.rsi_w }}: 30 이하면 과매도(반등 기대), 55 부근이 가장 바람직, 70 이상은 단기 과열로 감점<br>
+      &nbsp;&nbsp;· MACD 히스토그램 — 가중치 {{ method.macd_w }}: 0선 위에서 확대될수록 상승 신호로 고득점<br>
+      &nbsp;&nbsp;· 이동평균 괴리 — 가중치 {{ method.ma_w }}: 현재가가 20일선 위에 있을수록(적정 범위 내) 고득점<br>
+      &nbsp;&nbsp;· 볼린저밴드 %B — 가중치 {{ method.bb_w }}: 밴드 중간~상단 사이의 건강한 상승 구간을 선호<br>
+      &nbsp;&nbsp;· 거래량 배율 — 가중치 {{ method.vol_w }}: 20일 평균 대비 거래량 급증 시 가점<br>
+      &nbsp;&nbsp;※ 단기 점수는 위 5개 지표 중심, 장기 점수는 60일선 괴리(40%) + 60일 수익률(40%) + 추세 전환(20%)으로 별도 산정<br>
+      <b>2. 기본적 점수 (0~100점)</b><br>
+      &nbsp;&nbsp;· IB 컨센서스 — 가중치 {{ method.ib_w }}: 애널리스트 의견(강력매수 5 ~ 강력매도 1)의 가중평균, 최근 90일 상향/하향 건수로 가감<br>
+      &nbsp;&nbsp;· 목표가 괴리 — 가중치 {{ method.gap_w }}: 평균 목표가 대비 현재가 괴리율(-20% → 0점, +40% → 100점)<br>
+      &nbsp;&nbsp;· 뉴스 감성 — 가중치 {{ method.news_w }}: 최근 뉴스 제목의 긍정/부정 키워드 비율 (뉴스 없으면 중립 50점)<br>
+      &nbsp;&nbsp;· 시장 모멘텀 — 가중치 {{ method.sector_w }}: 같은 시장 전체의 평균 20일 수익률<br>
+      <b>3. 종합 점수</b> = 기술적 점수 × {{ method.tech_ratio_pct }}% + 기본적 점수 × {{ method.fund_ratio_pct }}%<br>
+      &nbsp;&nbsp;※ 데이터가 없는 항목은 중립값(50점)으로 처리되며, 종목 간 비교 가능하도록 모든 점수는 0~100으로 정규화됩니다.
+    </div>
+  </div>
+
+  <!-- 푸터 -->
+  <div style="background:#ffffff; padding:16px 24px; border:1px solid #ddd; border-radius:0 0 8px 8px; border-top:1px solid #eee;">
+    <div style="font-size:11px; color:#999; line-height:1.6;">
+      본 리포트는 투자 권유가 아닌 정보 제공용입니다. 무료 데이터 특성상 지연·누락이 있을 수 있습니다.<br>
+      분석 엔진: 규칙 기반 퀀트 스코어링 (위 산정 방식 참고)<br>
+      {% if ai_model_label %}AI 해설 모델: {{ ai_model_label }} — 위 지표를 바탕으로 생성된 참고용 해설입니다.<br>{% endif %}
+      데이터 출처: KRX/pykrx, Yahoo Finance, 네이버 금융, 위키피디아 · 데이터 기준: {{ report_date }} · 생성: stock-morning-brief
+    </div>
+  </div>
+
 </div>
-
-<h2>단기 추천 Top {{ short_term | length }} (수 일 ~ 수 주)</h2>
-<table>
-  <tr>
-    <th>시장</th><th>종목</th><th>종가</th><th>5일</th><th>20일</th>
-    <th>RSI</th><th>거래량배율</th><th>기술</th><th>기본</th><th>종합</th>
-  </tr>
-  {% for r in short_term %}
-  <tr>
-    <td>{{ r.country }}</td>
-    <td><b>{{ r.name }}</b> ({{ r.ticker }})</td>
-    <td>{{ fmt_price(r.close, r.country) }}</td>
-    <td class="{{ 'up' if (r.ret_5d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_5d) }}</td>
-    <td class="{{ 'up' if (r.ret_20d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_20d) }}</td>
-    <td>{{ fmt_num(r.rsi14) }}</td>
-    <td>{{ fmt_num(r.vol_ratio) }}</td>
-    <td>{{ r.technical_score }}</td>
-    <td>{{ r.fundamental_score }}</td>
-    <td><b>{{ r.composite_score }}</b></td>
-  </tr>
-  <tr class="reason"><td colspan="10">추천 사유 — {{ r.reasons | join(' / ') }}</td></tr>
-  {% if r.ai_comment %}<tr class="reason ai"><td colspan="10"><b>AI 해설</b> — {{ r.ai_comment }}</td></tr>{% endif %}
-  {% endfor %}
-</table>
-
-<h2>장기 추천 Top {{ long_term | length }} (2~3년)</h2>
-<table>
-  <tr>
-    <th>시장</th><th>종목</th><th>종가</th><th>20일</th><th>60일</th>
-    <th>목표가 괴리</th><th>IB 컨센서스</th><th>기술</th><th>기본</th><th>종합</th>
-  </tr>
-  {% for r in long_term %}
-  <tr>
-    <td>{{ r.country }}</td>
-    <td><b>{{ r.name }}</b> ({{ r.ticker }})</td>
-    <td>{{ fmt_price(r.close, r.country) }}</td>
-    <td class="{{ 'up' if (r.ret_20d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_20d) }}</td>
-    <td class="{{ 'up' if (r.ret_60d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_60d) }}</td>
-    <td>{{ fmt_pct(r.target_gap_pct) }}</td>
-    <td>{{ fmt_num(r.consensus_score) }}</td>
-    <td>{{ r.technical_score }}</td>
-    <td>{{ r.fundamental_score }}</td>
-    <td><b>{{ r.composite_score }}</b></td>
-  </tr>
-  <tr class="reason"><td colspan="10">추천 사유 — {{ r.reasons | join(' / ') }}</td></tr>
-  {% if r.ai_comment %}<tr class="reason ai"><td colspan="10"><b>AI 해설</b> — {{ r.ai_comment }}</td></tr>{% endif %}
-  {% endfor %}
-</table>
-
-<h2>시장별 강도</h2>
-<table>
-  <tr><th>시장</th><th>종목 수</th><th>평균 종합점수</th><th>평균 20일 수익률</th></tr>
-  {% for m in markets %}
-  <tr>
-    <td>{{ m.country }}</td>
-    <td>{{ m.count }}</td>
-    <td>{{ m.avg_composite }}</td>
-    <td class="{{ 'up' if (m.avg_ret_20d or 0) >= 0 else 'down' }}">{{ fmt_pct(m.avg_ret_20d) }}</td>
-  </tr>
-  {% endfor %}
-</table>
-
-<p class="note">
-  본 리포트는 투자 권유가 아닌 정보 제공용입니다. 묣 데이터 특성상 지연·누락이 있을 수 있습니다.<br>
-  분석 엔진: 규칙 기반 퀀트 스코어링 (RSI·MACD·이동평균 등 기술적 지표 + 애널리스트 컨센서스·목표가·뉴스 키워드 감성)<br>
-  {% if ai_model_label %}AI 해설 모델: {{ ai_model_label }} — 위 지표를 바탕으로 생성된 참고용 해설입니다.<br>{% endif %}
-  데이터 출처: KRX/pykrx, Yahoo Finance, 네이버 금융 · 데이터 기준: {{ report_date }} · 생성: stock-morning-brief
-</p>
 </body>
 </html>

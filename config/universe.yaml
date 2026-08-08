@@ -3,10 +3,11 @@
 kr:
   enabled: true
   source: pykrx
-  max_stocks: 300
+  max_stocks: 200
   min_market_cap: 100000000000  # 1천억 원 이상
   lookback_days: 120
-  # pykrx 사용 불가 시(최신 버전은 KRX_ID/KRX_PW 필요) yfinance로 조회하는 KOSPI 대표 종목
+  # pykrx 사용 불가 시(최신 버전은 KRX_ID/KRX_PW 필요) KOSPI 200(위키피디아)을 yfinance로 조회.
+  # 아래는 위키피디아마저 실패할 때의 최종 대체 리스트.
   fallback_tickers:
     - "005930"  # 삼성전자
     - "000660"  # SK하이닉스
@@ -53,8 +54,9 @@ us:
 jp:
   enabled: true
   source: yfinance
-  max_stocks: 300
-  # Nikkei 225 주요 구성종목 (yfinance 티커)
+  max_stocks: 225
+  use_nikkei225: true   # 일본어 위키피디아에서 Nikkei 225 전 구성 종목 조회
+  # use_nikkei225 실패 시 아래 리스트로 대체 (yfinance 티커)
   tickers:
     - 7203.T   # Toyota
     - 6758.T   # Sony

@@ -6,7 +6,7 @@
 - **기술적 분석**: RSI, MACD, 이동평균, 볼린저밴드, 거래량 급증
 - **기본적 분석**: IB(애널리스트) 의견·목표가, 뉴스/공시 감성, 업종 모멘텀
 - **종합 점수**: 기술 40% + 기본 60%
-- **비용**: 묣 데이터 + GitHub Actions 묣 티어 사용
+- **비용**: 무료 데이터 + GitHub Actions 무료 티어 사용
 
 ## 구조
 
@@ -56,7 +56,7 @@ GROQ_API_KEY=...   # 선택
    - `GMAIL_APP_PASSWORD`: Gmail 앱 비밀번호
    - `REPORT_EMAIL`: 리포트를 받을 이메일 주소
    - `GROQ_API_KEY`: (선택) Groq API 키 — 등록하면 종목별 AI 해설이 리포트에 추가됩니다.
-     https://console.groq.com 에서 묣 발급 (Llama 3.3 70B, 일 1,000회 묣)
+     https://console.groq.com 에서 무료 발급 (Llama 3.3 70B, 일 1,000회 무료)
 3. `.github/workflows/morning_report.yml` 의 cron 시간을 원하는대로 조정합니다.
    - 기본: 매일 08:00 KST
 
@@ -69,7 +69,7 @@ GROQ_API_KEY=...   # 선택
 ## 주의사항
 
 - 본 리포트는 투자 권유가 아닌 정보 제공용입니다.
-- 묣 데이터를 사용하므로 지연·누락이 있을 수 있습니다.
+- 무료 데이터를 사용하므로 지연·누락이 있을 수 있습니다.
 - 웹 데이터 수집은 robots.txt 및 사이트 정책을 준수하며, 과도한 호출을 피합니다.
 - 최신 pykrx는 KRX 자격 증명(`KRX_ID`/`KRX_PW` 환경 변수)을 요구합니다. 설정되어 있지 않으면
   `config/universe.yaml`의 `kr.fallback_tickers`(KOSPI 대표 종목)를 yfinance로 조회하는 방식으로 자동 전환됩니다.

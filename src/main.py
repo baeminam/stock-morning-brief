@@ -23,9 +23,10 @@ from analysis.technical import compute_technical_scores
 from analysis.sentiment import score_news, load_keywords
 from analysis.fundamental import compute_fundamental_scores
 from scoring import build_composite, rank_picks, load_scoring_config
-from report.ai_commentary import generate_commentary, is_available as ai_available, MODEL_LABEL
-from report.builder import build_report
+from report.ai_commentary import generate_commentary, translate_jp_names, is_available as ai_available, MODEL_LABEL
+from report.builder import build_report, build_text_report
 from report.email_sender import send_report_email
+from report.pdf_report import build_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +59,8 @@ def _describe_universe(prices, config_path) -> list[str]:
         kr_tickers = prices[prices["country"] == "KR"]["ticker"]
         if kr_tickers.str.contains(r"\.K[SQ]", regex=True).any():
             notes.append(
-                f"한국 {counts['KR']}개 — pykrx는 KRX 자격증명(KRX_ID/KRX_PW)이 필요하여, "
-                f"현재는 config에 지정된 KOSPI 대표 종목(fallback_tickers)으로 분석"
+                f"한국 {counts['KR']}개 — KOSPI 200 구성 종목 (pykrx는 KRX 자격증명이 필요하여 "
+                f"위키피디아 목록 + Yahoo Finance로 분석)"
             )
         else:
             notes.append(
@@ -72,9 +73,8 @@ def _describe_universe(prices, config_path) -> list[str]:
             f"미국 {counts['US']}개 — S&P 500 + NASDAQ 100 구성 종목 중 최대 {us_cfg.get('max_stocks', 0)}개"
         )
     if counts.get("JP"):
-        jp_cfg = config.get("jp", {})
         notes.append(
-            f"일본 {counts['JP']}개 — Nikkei 225 주요 구성 종목 {len(jp_cfg.get('tickers', []))}개 (config 지정)"
+            f"일본 {counts['JP']}개 — Nikkei 225 구성 종목 (일본어 위키피디아 목록 기준)"
         )
     return notes
 
@@ -143,10 +143,8 @@ def run(send_email: bool = False, news_max_tickers: int = 50, config_path: str |
     logger.info("=== 6/6 AI commentary & building report ===")
     commentary = {}
     if ai_available():
-        commentary = generate_commentary(
-            picks["short_term"].to_dict("records"),
-            picks["long_term"].to_dict("records"),
-        )
+        translate_jp_names(picks)
+        commentary = generate_commentary(picks)
     universe_notes = _describe_universe(prices, config_path)
     html = build_report(
         composite_df,
@@ -160,9 +158,13 @@ def run(send_email: bool = False, news_max_tickers: int = 50, config_path: str |
     report_path.write_text(html, encoding="utf-8")
     logger.info("Report saved: %s", report_path)
 
+    pdf_path = build_pdf(report_path)
+
     if send_email:
-        subject = f"[증시 모닝 브리프] {datetime.today().strftime('%Y-%m-%d')}"
-        return send_report_email(subject, html, recipients=_load_recipients())
+        subject = f"[일일 종목 분석 리포트] {datetime.today().strftime('%Y-%m-%d')}"
+        text_body = build_text_report(picks, universe_notes=universe_notes, commentary=commentary)
+        attachments = [pdf_path] if pdf_path else []
+        return send_report_email(subject, html, recipients=_load_recipients(), text_body=text_body, attachments=attachments)
     return True
 
 

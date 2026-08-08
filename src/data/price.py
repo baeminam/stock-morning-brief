@@ -151,15 +151,88 @@ def get_us_universe(config: dict) -> list[dict]:
 
 
 def get_jp_universe(config: dict) -> list[dict]:
-    """Return Japanese stock universe from config tickers."""
+    """Return Japanese stock universe: Nikkei 225 from Wikipedia, else config tickers."""
     cfg = config.get("jp", {})
     if not cfg.get("enabled", False):
         return []
 
+    max_stocks = cfg.get("max_stocks", 225)
+
+    if cfg.get("use_nikkei225", False):
+        universe = _fetch_nikkei225(max_stocks)
+        if universe:
+            return universe
+        logger.warning("Nikkei 225 fetch failed; falling back to config tickers")
+
     tickers = cfg.get("tickers", [])
-    max_stocks = cfg.get("max_stocks", len(tickers))
     tickers = tickers[:max_stocks]
     return [{"ticker": t, "name": t, "country": "JP"} for t in tickers]
+
+
+def _fetch_wiki_tables(url: str) -> list[pd.DataFrame]:
+    html = requests.get(url, headers=HTTP_HEADERS, timeout=15).text
+    return pd.read_html(io.StringIO(html))
+
+
+def _fetch_kospi200(max_stocks: int = 200) -> list[dict]:
+    """KOSPI 200 constituents from English Wikipedia (ticker -> .KS)."""
+    try:
+        for tbl in _fetch_wiki_tables("https://en.wikipedia.org/wiki/KOSPI_200"):
+            cols = [str(c) for c in tbl.columns]
+            if "Symbol" in cols and len(tbl) >= 150:
+                codes = tbl["Symbol"].astype(str).str.zfill(6)
+                names = tbl["Company"].astype(str) if "Company" in cols else codes
+                return [
+                    {"ticker": f"{c}.KS", "name": n, "country": "KR"}
+                    for c, n in zip(codes, names)
+                ][:max_stocks]
+    except Exception as e:
+        logger.warning("Failed to fetch KOSPI 200 list: %s", e)
+    return []
+
+
+def _fetch_nikkei225(max_stocks: int = 225) -> list[dict]:
+    """Nikkei 225 constituents from Japanese Wikipedia (industry-split tables)."""
+    url = "https://ja.wikipedia.org/wiki/%E6%97%A5%E7%B5%8C%E5%B9%B3%E5%9D%87%E6%A0%AA%E4%BE%A1"
+    try:
+        frames = []
+        for tbl in _fetch_wiki_tables(url):
+            cols = [str(c) for c in tbl.columns]
+            if "証券コード" in cols and "銘柄" in cols:
+                frames.append(tbl[["証券コード", "銘柄"]])
+        if not frames:
+            return []
+        df = pd.concat(frames, ignore_index=True)
+        df["証券コード"] = df["証券コード"].astype(str).str.strip()
+        df = df.drop_duplicates(subset="証券コード")
+        return [
+            {"ticker": f"{row['証券コード']}.T", "name": str(row["銘柄"]), "country": "JP"}
+            for _, row in df.iterrows()
+        ][:max_stocks]
+    except Exception as e:
+        logger.warning("Failed to fetch Nikkei 225 list: %s", e)
+        return []
+
+
+def enrich_kr_names(universe: list[dict], sleep_sec: float = 0.15) -> list[dict]:
+    """Replace KR ticker names with Korean names from Naver mobile API."""
+    enriched = []
+    for item in universe:
+        code = item["ticker"].split(".")[0]
+        name = item.get("name", code)
+        try:
+            resp = requests.get(
+                f"https://m.stock.naver.com/api/stock/{code}/basic",
+                headers=HTTP_HEADERS, timeout=10,
+            )
+            kr_name = resp.json().get("stockName")
+            if kr_name:
+                name = kr_name
+        except Exception as e:
+            logger.debug("KR name fetch failed for %s: %s", code, e)
+        enriched.append({**item, "name": name})
+        time.sleep(sleep_sec)
+    return enriched
 
 
 def fetch_kr_prices(universe: list[dict], lookback_days: int) -> pd.DataFrame:
@@ -313,20 +386,27 @@ def fetch_all_prices(config_path: str | Path = CONFIG_PATH, enrich_names: bool =
     us_uni = get_us_universe(config)
     jp_uni = get_jp_universe(config)
 
-    # Recent pykrx versions require KRX credentials; fall back to a curated
-    # yfinance-based Korean universe when pykrx is unavailable.
+    # Recent pykrx versions require KRX credentials; fall back to the KOSPI 200
+    # list (Wikipedia) and finally to a curated config list, both via yfinance.
     kr_via_yf = False
     if not kr_uni:
         kr_cfg = config.get("kr", {})
-        fallback = kr_cfg.get("fallback_tickers", [])
-        if kr_cfg.get("enabled", False) and fallback:
-            max_stocks = kr_cfg.get("max_stocks", len(fallback))
-            kr_uni = [
-                {"ticker": f"{t}.KS", "name": t, "country": "KR"}
-                for t in fallback[:max_stocks]
-            ]
-            kr_via_yf = True
-            logger.info("KR universe via yfinance fallback: %d tickers", len(kr_uni))
+        if kr_cfg.get("enabled", False):
+            max_stocks = kr_cfg.get("max_stocks", 200)
+            kr_uni = _fetch_kospi200(max_stocks)
+            if kr_uni:
+                logger.info("KR universe via KOSPI 200 (Wikipedia): %d tickers", len(kr_uni))
+            else:
+                fallback = kr_cfg.get("fallback_tickers", [])
+                if fallback:
+                    kr_uni = [
+                        {"ticker": f"{t}.KS", "name": t, "country": "KR"}
+                        for t in fallback[:max_stocks]
+                    ]
+                    logger.info("KR universe via config fallback: %d tickers", len(kr_uni))
+            if kr_uni:
+                kr_via_yf = True
+                kr_uni = enrich_kr_names(kr_uni)
 
     logger.info("Universes: KR=%d US=%d JP=%d", len(kr_uni), len(us_uni), len(jp_uni))
 

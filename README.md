@@ -38,6 +38,16 @@ python run_local.py
 python run_local.py --send-email
 ```
 
+로컬에서 메일/AI 해설을 테스트하려면 프로젝트 루트에 `.env` 파일을 만들고 값을 넣으세요
+(`.env`는 git에 올라가지 않습니다):
+
+```
+GMAIL_USER=...
+GMAIL_APP_PASSWORD=...
+REPORT_EMAIL=...
+GROQ_API_KEY=...   # 선택
+```
+
 ## GitHub Actions 배포
 
 1. 이 저장소를 **public repository**로 GitHub에 push합니다.
@@ -45,8 +55,16 @@ python run_local.py --send-email
    - `GMAIL_USER`: 발송할 Gmail 주소
    - `GMAIL_APP_PASSWORD`: Gmail 앱 비밀번호
    - `REPORT_EMAIL`: 리포트를 받을 이메일 주소
+   - `GROQ_API_KEY`: (선택) Groq API 키 — 등록하면 종목별 AI 해설이 리포트에 추가됩니다.
+     https://console.groq.com 에서 묣 발급 (Llama 3.3 70B, 일 1,000회 묣)
 3. `.github/workflows/morning_report.yml` 의 cron 시간을 원하는대로 조정합니다.
    - 기본: 매일 08:00 KST
+
+## 수신 이메일 추가
+
+- **여러 명에게 발송**: `config/recipients.txt`에 한 줄에 하나씩 이메일을 추가하면 됩니다.
+  GitHub 웹에서 파일 편집(연필 아이콘) → commit만으로 바로 반영됩니다.
+- `REPORT_EMAIL` Secret에 등록된 주소도 함께 발송됩니다 (쉼표로 여러 개 지정 가능).
 
 ## 주의사항
 

@@ -8,6 +8,7 @@ Usage:
 
 import argparse
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from analysis.technical import compute_technical_scores
 from analysis.sentiment import score_news, load_keywords
 from analysis.fundamental import compute_fundamental_scores
 from scoring import build_composite, rank_picks, load_scoring_config
+from report.ai_commentary import generate_commentary, is_available as ai_available, MODEL_LABEL
 from report.builder import build_report
 from report.email_sender import send_report_email
 
@@ -30,7 +32,70 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
+def _load_dotenv():
+    """Load KEY=VALUE lines from project .env into os.environ (local use only)."""
+    env_path = DATA_DIR.parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+def _describe_universe(prices, config_path) -> list[str]:
+    """Build human-readable notes explaining each market's universe size."""
+    from data.price import load_config
+
+    config = load_config(config_path)
+    counts = prices.groupby("country")["ticker"].nunique().to_dict() if not prices.empty else {}
+    notes = []
+
+    if counts.get("KR"):
+        kr_cfg = config.get("kr", {})
+        kr_tickers = prices[prices["country"] == "KR"]["ticker"]
+        if kr_tickers.str.contains(r"\.K[SQ]", regex=True).any():
+            notes.append(
+                f"한국 {counts['KR']}개 — pykrx는 KRX 자격증명(KRX_ID/KRX_PW)이 필요하여, "
+                f"현재는 config에 지정된 KOSPI 대표 종목(fallback_tickers)으로 분석"
+            )
+        else:
+            notes.append(
+                f"한국 {counts['KR']}개 — 시가총액 {kr_cfg.get('min_market_cap', 0):,}원 이상 종목 중 "
+                f"거래대금 상위 {kr_cfg.get('max_stocks', 0)}개 (pykrx 기준)"
+            )
+    if counts.get("US"):
+        us_cfg = config.get("us", {})
+        notes.append(
+            f"미국 {counts['US']}개 — S&P 500 + NASDAQ 100 구성 종목 중 최대 {us_cfg.get('max_stocks', 0)}개"
+        )
+    if counts.get("JP"):
+        jp_cfg = config.get("jp", {})
+        notes.append(
+            f"일본 {counts['JP']}개 — Nikkei 225 주요 구성 종목 {len(jp_cfg.get('tickers', []))}개 (config 지정)"
+        )
+    return notes
+
+
+def _load_recipients() -> list[str]:
+    """Merge recipients from config/recipients.txt and REPORT_EMAIL env."""
+    emails = []
+    rcpt_file = DATA_DIR.parent / "config" / "recipients.txt"
+    if rcpt_file.exists():
+        for line in rcpt_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "@" in line:
+                emails.append(line)
+    raw = os.environ.get("REPORT_EMAIL", "")
+    emails.extend(e.strip() for e in raw.replace(";", ",").split(",") if e.strip())
+    # dedupe, preserve order
+    return list(dict.fromkeys(emails))
+
+
 def run(send_email: bool = False, news_max_tickers: int = 50, config_path: str | Path = CONFIG_PATH) -> bool:
+    _load_dotenv()
     DATA_DIR.mkdir(exist_ok=True)
     stamp = datetime.today().strftime("%Y%m%d")
 
@@ -51,6 +116,18 @@ def run(send_email: bool = False, news_max_tickers: int = 50, config_path: str |
     yf_mask = (prices["country"] != "KR") | prices["ticker"].str.contains(r"\.K[SQ]", regex=True)
     opinion_df = fetch_ib_opinions(prices[yf_mask])
 
+    # Fill in real company names collected from yfinance info
+    if not opinion_df.empty and "name" in opinion_df.columns:
+        name_map = opinion_df.dropna(subset=["name"]).set_index("ticker")["name"].to_dict()
+
+        def _fix_name(row):
+            n = str(row["name"])
+            if n == str(row["ticker"]) or n == str(row["ticker"]).split(".")[0]:
+                return name_map.get(row["ticker"], n)
+            return n
+
+        tech_df["name"] = tech_df.apply(_fix_name, axis=1)
+
     logger.info("=== 4/6 Fetching news & sentiment ===")
     news_df = fetch_all_news(prices, max_per_ticker=5, max_tickers=news_max_tickers)
     if not news_df.empty:
@@ -63,15 +140,29 @@ def run(send_email: bool = False, news_max_tickers: int = 50, config_path: str |
     composite_df.to_csv(DATA_DIR / f"scores_{stamp}.csv", index=False)
     picks = rank_picks(composite_df, scoring_config)
 
-    logger.info("=== 6/6 Building report ===")
-    html = build_report(composite_df, picks, scoring_config)
+    logger.info("=== 6/6 AI commentary & building report ===")
+    commentary = {}
+    if ai_available():
+        commentary = generate_commentary(
+            picks["short_term"].to_dict("records"),
+            picks["long_term"].to_dict("records"),
+        )
+    universe_notes = _describe_universe(prices, config_path)
+    html = build_report(
+        composite_df,
+        picks,
+        scoring_config,
+        universe_notes=universe_notes,
+        commentary=commentary,
+        ai_model_label=MODEL_LABEL if commentary else None,
+    )
     report_path = DATA_DIR / f"report_{stamp}.html"
     report_path.write_text(html, encoding="utf-8")
     logger.info("Report saved: %s", report_path)
 
     if send_email:
         subject = f"[증시 모닝 브리프] {datetime.today().strftime('%Y-%m-%d')}"
-        return send_report_email(subject, html)
+        return send_report_email(subject, html, recipients=_load_recipients())
     return True
 
 

@@ -15,13 +15,21 @@
   .down { color: #1976d2; }
   .note { font-size: 12px; color: #888; margin-top: 24px; }
   .summary { background: #f4f7fb; padding: 12px 16px; border-radius: 6px; font-size: 14px; }
+  .summary ul { margin: 6px 0 0 0; padding-left: 18px; }
+  .reason td { background: #fafbfc; color: #555; font-size: 12px; text-align: left !important; border-top: none; }
+  .reason.ai td { background: #eef5ff; color: #1a4a8a; }
 </style>
 </head>
 <body>
 <h1>증시 모닝 브리프 ({{ report_date }})</h1>
 
 <div class="summary">
-  분석 대상: 한국 {{ counts.KR or 0 }}개 / 미국 {{ counts.US or 0 }}개 / 일본 {{ counts.JP or 0 }}개 종목<br>
+  <b>분석 대상</b>
+  <ul>
+    {% for n in universe_notes %}
+    <li>{{ n }}</li>
+    {% endfor %}
+  </ul>
   종합 점수 = 기술적 {{ (tech_ratio * 100) | round | int }}% + 기본적 {{ (fund_ratio * 100) | round | int }}%
   (기술: RSI·MACD·이동평균·볼린저·거래량 / 기본: IB의견·목표가·뉴스감성·시장모멘텀)
 </div>
@@ -35,7 +43,7 @@
   {% for r in short_term %}
   <tr>
     <td>{{ r.country }}</td>
-    <td>{{ r.name }} ({{ r.ticker }})</td>
+    <td><b>{{ r.name }}</b> ({{ r.ticker }})</td>
     <td>{{ fmt_price(r.close, r.country) }}</td>
     <td class="{{ 'up' if (r.ret_5d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_5d) }}</td>
     <td class="{{ 'up' if (r.ret_20d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_20d) }}</td>
@@ -45,6 +53,8 @@
     <td>{{ r.fundamental_score }}</td>
     <td><b>{{ r.composite_score }}</b></td>
   </tr>
+  <tr class="reason"><td colspan="10">추천 사유 — {{ r.reasons | join(' / ') }}</td></tr>
+  {% if r.ai_comment %}<tr class="reason ai"><td colspan="10"><b>AI 해설</b> — {{ r.ai_comment }}</td></tr>{% endif %}
   {% endfor %}
 </table>
 
@@ -57,7 +67,7 @@
   {% for r in long_term %}
   <tr>
     <td>{{ r.country }}</td>
-    <td>{{ r.name }} ({{ r.ticker }})</td>
+    <td><b>{{ r.name }}</b> ({{ r.ticker }})</td>
     <td>{{ fmt_price(r.close, r.country) }}</td>
     <td class="{{ 'up' if (r.ret_20d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_20d) }}</td>
     <td class="{{ 'up' if (r.ret_60d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_60d) }}</td>
@@ -67,6 +77,8 @@
     <td>{{ r.fundamental_score }}</td>
     <td><b>{{ r.composite_score }}</b></td>
   </tr>
+  <tr class="reason"><td colspan="10">추천 사유 — {{ r.reasons | join(' / ') }}</td></tr>
+  {% if r.ai_comment %}<tr class="reason ai"><td colspan="10"><b>AI 해설</b> — {{ r.ai_comment }}</td></tr>{% endif %}
   {% endfor %}
 </table>
 
@@ -85,7 +97,9 @@
 
 <p class="note">
   본 리포트는 투자 권유가 아닌 정보 제공용입니다. 묣 데이터 특성상 지연·누락이 있을 수 있습니다.<br>
-  데이터 기준: {{ report_date }} / 생성: stock-morning-brief
+  분석 엔진: 규칙 기반 퀀트 스코어링 (RSI·MACD·이동평균 등 기술적 지표 + 애널리스트 컨센서스·목표가·뉴스 키워드 감성)<br>
+  {% if ai_model_label %}AI 해설 모델: {{ ai_model_label }} — 위 지표를 바탕으로 생성된 참고용 해설입니다.<br>{% endif %}
+  데이터 출처: KRX/pykrx, Yahoo Finance, 네이버 금융 · 데이터 기준: {{ report_date }} · 생성: stock-morning-brief
 </p>
 </body>
 </html>

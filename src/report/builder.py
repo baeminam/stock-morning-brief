@@ -37,7 +37,75 @@ def _fmt_num(value) -> str:
     return f"{value:.1f}"
 
 
-def build_report(composite_df: pd.DataFrame, picks: dict, scoring_config: dict) -> str:
+def _make_reasons(rec: dict, horizon: str) -> list[str]:
+    """Generate 2-3 line Korean recommendation reasons from indicator values."""
+    tech_items = []
+    fund_items = []
+
+    rsi = rec.get("rsi14")
+    if rsi is not None and not pd.isna(rsi):
+        if rsi < 30:
+            tech_items.append(f"RSI {rsi:.0f}로 과매도 구간 — 기술적 반등 후보")
+        elif rsi <= 65:
+            tech_items.append(f"RSI {rsi:.0f}로 과열 없는 상승 흐름")
+        else:
+            tech_items.append(f"RSI {rsi:.0f}로 단기 과열 — 변동성 주의")
+
+    macd = rec.get("macd_hist_pct")
+    if macd is not None and not pd.isna(macd) and macd > 0:
+        tech_items.append("MACD 상승 신호 유지")
+
+    vol = rec.get("vol_ratio")
+    if vol is not None and not pd.isna(vol) and vol >= 1.5:
+        tech_items.append(f"거래량 20일 평균 대비 {vol:.1f}배 급증")
+
+    ret20 = rec.get("ret_20d")
+    if ret20 is not None and not pd.isna(ret20):
+        tech_items.append(f"최근 20일 수익률 {ret20:+.1f}%")
+
+    gap = rec.get("target_gap_pct")
+    if gap is not None and not pd.isna(gap):
+        if gap > 5:
+            fund_items.append(f"애널리스트 목표가 대비 +{gap:.0f}% 상승 여력")
+        elif gap < -5:
+            fund_items.append(f"목표가 대비 {gap:.0f}% — 목표가 근접/초과 구간")
+
+    cons = rec.get("consensus_score")
+    if cons is not None and not pd.isna(cons):
+        label = "매수 우위" if cons >= 4 else "중립" if cons >= 3 else "비관 우위"
+        fund_items.append(f"IB 컨센서스 {cons:.1f}/5 ({label})")
+
+    sent = rec.get("sentiment_score")
+    if sent is not None and not pd.isna(sent):
+        if sent >= 70:
+            fund_items.append("최근 뉴스 긍정 우세")
+        elif sent <= 30:
+            fund_items.append("최근 뉴스 부정 우세 — 주의")
+
+    if horizon == "long":
+        ordered = fund_items + tech_items
+    else:
+        ordered = tech_items + fund_items
+    return ordered[:3] if ordered else ["종합 점수 상위 종목"]
+
+
+def _attach_reasons(df: pd.DataFrame, horizon: str, commentary: dict | None = None) -> list[dict]:
+    records = df.to_dict("records")
+    commentary = commentary or {}
+    for rec in records:
+        rec["reasons"] = _make_reasons(rec, horizon)
+        rec["ai_comment"] = commentary.get((rec.get("ticker"), horizon))
+    return records
+
+
+def build_report(
+    composite_df: pd.DataFrame,
+    picks: dict,
+    scoring_config: dict,
+    universe_notes: list[str] | None = None,
+    commentary: dict | None = None,
+    ai_model_label: str | None = None,
+) -> str:
     """Render the morning brief HTML."""
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATE_DIR)),
@@ -54,10 +122,12 @@ def build_report(composite_df: pd.DataFrame, picks: dict, scoring_config: dict) 
     html = template.render(
         report_date=datetime.today().strftime("%Y-%m-%d"),
         counts=counts,
+        universe_notes=universe_notes or [],
+        ai_model_label=ai_model_label,
         tech_ratio=comp_cfg.get("technical_ratio", 0.4),
         fund_ratio=comp_cfg.get("fundamental_ratio", 0.6),
-        short_term=picks.get("short_term", pd.DataFrame()).to_dict("records"),
-        long_term=picks.get("long_term", pd.DataFrame()).to_dict("records"),
+        short_term=_attach_reasons(picks.get("short_term", pd.DataFrame()), "short", commentary),
+        long_term=_attach_reasons(picks.get("long_term", pd.DataFrame()), "long", commentary),
         markets=picks.get("markets", pd.DataFrame()).to_dict("records"),
     )
     logger.info("Report HTML built (%d bytes)", len(html))

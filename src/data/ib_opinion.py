@@ -103,6 +103,7 @@ def _fetch_ticker_opinion(ticker: str, country: str, current_price: float | None
         return {
             "ticker": ticker,
             "country": country,
+            "name": info.get("shortName") or info.get("longName"),
             "current_price": current_price,
             "target_price": target_price,
             "target_gap_pct": target_gap_pct,
@@ -115,6 +116,7 @@ def _fetch_ticker_opinion(ticker: str, country: str, current_price: float | None
         return {
             "ticker": ticker,
             "country": country,
+            "name": None,
             "current_price": current_price,
             "target_price": None,
             "target_gap_pct": None,

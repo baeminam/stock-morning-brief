@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>증시 모닝 브리프 - {{ report_date }}</title>
+<style>
+  body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; color: #222; max-width: 900px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 22px; border-bottom: 3px solid #1a73e8; padding-bottom: 8px; }
+  h2 { font-size: 17px; color: #1a73e8; margin-top: 28px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: right; }
+  th { background: #f4f7fb; text-align: center; }
+  td:first-child, td:nth-child(2) { text-align: left; }
+  .up { color: #d32f2f; }
+  .down { color: #1976d2; }
+  .note { font-size: 12px; color: #888; margin-top: 24px; }
+  .summary { background: #f4f7fb; padding: 12px 16px; border-radius: 6px; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>증시 모닝 브리프 ({{ report_date }})</h1>
+
+<div class="summary">
+  분석 대상: 한국 {{ counts.KR or 0 }}개 / 미국 {{ counts.US or 0 }}개 / 일본 {{ counts.JP or 0 }}개 종목<br>
+  종합 점수 = 기술적 {{ (tech_ratio * 100) | round | int }}% + 기본적 {{ (fund_ratio * 100) | round | int }}%
+  (기술: RSI·MACD·이동평균·볼린저·거래량 / 기본: IB의견·목표가·뉴스감성·시장모멘텀)
+</div>
+
+<h2>단기 추천 Top {{ short_term | length }} (수 일 ~ 수 주)</h2>
+<table>
+  <tr>
+    <th>시장</th><th>종목</th><th>종가</th><th>5일</th><th>20일</th>
+    <th>RSI</th><th>거래량배율</th><th>기술</th><th>기본</th><th>종합</th>
+  </tr>
+  {% for r in short_term %}
+  <tr>
+    <td>{{ r.country }}</td>
+    <td>{{ r.name }} ({{ r.ticker }})</td>
+    <td>{{ fmt_price(r.close, r.country) }}</td>
+    <td class="{{ 'up' if (r.ret_5d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_5d) }}</td>
+    <td class="{{ 'up' if (r.ret_20d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_20d) }}</td>
+    <td>{{ fmt_num(r.rsi14) }}</td>
+    <td>{{ fmt_num(r.vol_ratio) }}</td>
+    <td>{{ r.technical_score }}</td>
+    <td>{{ r.fundamental_score }}</td>
+    <td><b>{{ r.composite_score }}</b></td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>장기 추천 Top {{ long_term | length }} (2~3년)</h2>
+<table>
+  <tr>
+    <th>시장</th><th>종목</th><th>종가</th><th>20일</th><th>60일</th>
+    <th>목표가 괴리</th><th>IB 컨센서스</th><th>기술</th><th>기본</th><th>종합</th>
+  </tr>
+  {% for r in long_term %}
+  <tr>
+    <td>{{ r.country }}</td>
+    <td>{{ r.name }} ({{ r.ticker }})</td>
+    <td>{{ fmt_price(r.close, r.country) }}</td>
+    <td class="{{ 'up' if (r.ret_20d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_20d) }}</td>
+    <td class="{{ 'up' if (r.ret_60d or 0) >= 0 else 'down' }}">{{ fmt_pct(r.ret_60d) }}</td>
+    <td>{{ fmt_pct(r.target_gap_pct) }}</td>
+    <td>{{ fmt_num(r.consensus_score) }}</td>
+    <td>{{ r.technical_score }}</td>
+    <td>{{ r.fundamental_score }}</td>
+    <td><b>{{ r.composite_score }}</b></td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>시장별 강도</h2>
+<table>
+  <tr><th>시장</th><th>종목 수</th><th>평균 종합점수</th><th>평균 20일 수익률</th></tr>
+  {% for m in markets %}
+  <tr>
+    <td>{{ m.country }}</td>
+    <td>{{ m.count }}</td>
+    <td>{{ m.avg_composite }}</td>
+    <td class="{{ 'up' if (m.avg_ret_20d or 0) >= 0 else 'down' }}">{{ fmt_pct(m.avg_ret_20d) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<p class="note">
+  본 리포트는 투자 권유가 아닌 정보 제공용입니다. 묣 데이터 특성상 지연·누락이 있을 수 있습니다.<br>
+  데이터 기준: {{ report_date }} / 생성: stock-morning-brief
+</p>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# 스모크 테스트용 축소 유니버스
+
+kr:
+  enabled: true
+  source: pykrx
+  max_stocks: 3
+  min_market_cap: 100000000000
+  lookback_days: 120
+  fallback_tickers:
+    - "005930"  # 삼성전자
+    - "000660"  # SK하이닉스
+    - "035420"  # NAVER
+
+us:
+  enabled: true
+  source: yfinance
+  max_stocks: 5
+  indices:
+    - ^GSPC
+  lookback_days: 120
+
+jp:
+  enabled: true
+  source: yfinance
+  max_stocks: 2
+  tickers:
+    - 7203.T   # Toyota
+    - 6758.T   # Sony
+  lookback_days: 120

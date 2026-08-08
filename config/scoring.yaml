@@ -1,0 +1,23 @@
+# 점수 가중치 설정
+
+technical:
+  rsi_weight: 30
+  macd_weight: 25
+  ma_weight: 20
+  bollinger_weight: 15
+  volume_weight: 10
+
+fundamental:
+  ib_opinion_weight: 40
+  target_price_gap_weight: 30
+  news_sentiment_weight: 20
+  sector_momentum_weight: 10
+
+composite:
+  technical_ratio: 0.4
+  fundamental_ratio: 0.6
+
+ranking:
+  short_term_top_n: 10
+  long_term_top_n: 10
+  sector_top_n: 5

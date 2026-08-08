@@ -26,9 +26,10 @@
   <!-- 추천 섹션 (단기/장기 × 국가별) -->
   {% for sec in sections %}
   <div style="background:#ffffff; padding:16px 24px; border-left:1px solid #ddd; border-right:1px solid #ddd; {{ 'border-top:1px solid #eee;' if not loop.first }}">
-    <div style="font-size:16px; font-weight:bold; color:{{ sec.color }}; border-left:4px solid {{ sec.color }}; padding-left:8px; margin-bottom:10px;">
+    <div style="font-size:16px; font-weight:bold; color:{{ sec.color }}; border-left:4px solid {{ sec.color }}; padding-left:8px; margin-bottom:6px;">
       {{ sec.title }} <span style="font-size:12px; color:#888; font-weight:normal;">({{ sec.subtitle }}) · 국가별 Top 10</span>
     </div>
+    <div style="font-size:11px; color:#888; margin:0 0 10px 12px;">{{ sec.criteria }}</div>
     {% for g in sec.groups %}
     <div style="font-size:14px; font-weight:bold; color:#333; margin:14px 0 8px 0; padding:4px 10px; background:#f4f7fb; border-radius:4px;">
       {{ g.label }} ({{ g.country }})
@@ -40,7 +41,7 @@
           <span style="display:inline-block; background:{{ sec.color }}; color:#fff; font-size:11px; padding:1px 6px; border-radius:3px; margin-right:6px;">{{ loop.index }}</span>
           <b style="font-size:14px;">{{ r.name }}</b>
           <span style="color:#888; font-size:12px;">{{ r.ticker }}</span>
-          <span style="float:right; font-size:15px; font-weight:bold; color:#1a73e8;">{{ r.composite_score }}점</span>
+          <span style="float:right; font-size:15px; font-weight:bold; color:#1a73e8;">{% if sec.key == 'short' %}단기 {{ r.short_term_score }}{% else %}장기 {{ r.long_term_score }}{% endif %}점</span>
         </td>
       </tr>
       <tr>
@@ -49,12 +50,14 @@
           종가 <b>{{ fmt_price(r.close, r.country) }}</b> ·
           5일 <font color="{{ '#d32f2f' if (r.ret_5d or 0) >= 0 else '#1976d2' }}">{{ fmt_pct(r.ret_5d) }}</font> ·
           20일 <font color="{{ '#d32f2f' if (r.ret_20d or 0) >= 0 else '#1976d2' }}">{{ fmt_pct(r.ret_20d) }}</font> ·
-          RSI {{ fmt_num(r.rsi14) }} · 거래량 {{ fmt_num(r.vol_ratio) }}배
+          RSI {{ fmt_num(r.rsi14) }} · 거래량 {{ fmt_num(r.vol_ratio) }}배 ·
+          <span style="color:#888;">종합 {{ r.composite_score }}점</span>
           {% else %}
           종가 <b>{{ fmt_price(r.close, r.country) }}</b> ·
           20일 <font color="{{ '#d32f2f' if (r.ret_20d or 0) >= 0 else '#1976d2' }}">{{ fmt_pct(r.ret_20d) }}</font> ·
           60일 <font color="{{ '#d32f2f' if (r.ret_60d or 0) >= 0 else '#1976d2' }}">{{ fmt_pct(r.ret_60d) }}</font> ·
-          목표가 괴리 {{ fmt_pct(r.target_gap_pct) }} · 컨센서스 {{ fmt_num(r.consensus_score) }}/5
+          목표가 괴리 {{ fmt_pct(r.target_gap_pct) }} · 컨센서스 {{ fmt_num(r.consensus_score) }}/5 ·
+          <span style="color:#888;">종합 {{ r.composite_score }}점</span>
           {% endif %}
         </td>
       </tr>
@@ -102,19 +105,22 @@
     <div style="font-size:16px; font-weight:bold; color:#666; border-left:4px solid #999; padding-left:8px; margin-bottom:10px;">종합 점수 산정 방식</div>
     <div style="font-size:12px; color:#555; line-height:1.8;">
       <b>1. 기술적 점수 (0~100점)</b> — 최근 120일 주가·거래량으로 계산한 지표를 각각 0~100점으로 환산한 뒤 가중합합니다.<br>
-      &nbsp;&nbsp;· RSI(14) — 가중치 {{ method.rsi_w }}: 30 이하면 과매도(반등 기대), 55 부근이 가장 바람직, 70 이상은 단기 과열로 감점<br>
-      &nbsp;&nbsp;· MACD 히스토그램 — 가중치 {{ method.macd_w }}: 0선 위에서 확대될수록 상승 신호로 고득점<br>
-      &nbsp;&nbsp;· 이동평균 괴리 — 가중치 {{ method.ma_w }}: 현재가가 20일선 위에 있을수록(적정 범위 내) 고득점<br>
-      &nbsp;&nbsp;· 볼린저밴드 %B — 가중치 {{ method.bb_w }}: 밴드 중간~상단 사이의 건강한 상승 구간을 선호<br>
-      &nbsp;&nbsp;· 거래량 배율 — 가중치 {{ method.vol_w }}: 20일 평균 대비 거래량 급증 시 가점<br>
-      &nbsp;&nbsp;※ 단기 점수는 위 5개 지표 중심, 장기 점수는 60일선 괴리(40%) + 60일 수익률(40%) + 추세 전환(20%)으로 별도 산정<br>
+      &nbsp;&nbsp;· RSI(14) — 가중치 {{ method.rsi_w }}: 30 이하 과매도는 반등 기대로 60점, 55 부근이 100점 만점, 70 이상은 단기 과열로 감점 (예: RSI 55 → 100점, RSI 75 → 45점)<br>
+      &nbsp;&nbsp;· MACD 히스토그램 — 가중치 {{ method.macd_w }}: 상승 신호(양수)일수록 고득점 (주가 대비 -1% → 0점, 0 → 50점, +1% 이상 → 100점)<br>
+      &nbsp;&nbsp;· 20일 이평선 괴리 — 가중치 {{ method.ma_w }}: 현재가가 20일선보다 높을수록 고득점 (-10% 이하 → 0점, 20일선과 같으면 50점, +10% 이상 → 100점)<br>
+      &nbsp;&nbsp;· 볼린저밴드 %B — 가중치 {{ method.bb_w }}: 밴드 중간~상단(55% 지점)이 100점, 하단 터치나 상단 돌파 등 극단으로 갈수록 감점<br>
+      &nbsp;&nbsp;· 거래량 배율 — 가중치 {{ method.vol_w }}: 20일 평균 대비 거래량이 많을수록 고득점 (0.5배 이하 → 0점, 1배 → 20점, 3배 이상 → 100점)<br>
       <b>2. 기본적 점수 (0~100점)</b><br>
-      &nbsp;&nbsp;· IB 컨센서스 — 가중치 {{ method.ib_w }}: 애널리스트 의견(강력매수 5 ~ 강력매도 1)의 가중평균, 최근 90일 상향/하향 건수로 가감<br>
-      &nbsp;&nbsp;· 목표가 괴리 — 가중치 {{ method.gap_w }}: 평균 목표가 대비 현재가 괴리율(-20% → 0점, +40% → 100점)<br>
-      &nbsp;&nbsp;· 뉴스 감성 — 가중치 {{ method.news_w }}: 최근 뉴스 제목의 긍정/부정 키워드 비율 (뉴스 없으면 중립 50점)<br>
-      &nbsp;&nbsp;· 시장 모멘텀 — 가중치 {{ method.sector_w }}: 같은 시장 전체의 평균 20일 수익률<br>
+      &nbsp;&nbsp;· IB 컨센서스 — 가중치 {{ method.ib_w }}: 애널리스트 평균 의견이 매수에 가까울수록 고득점 (강력매도 1.0 → 0점, 중립 3.0 → 50점, 강력매수 5.0 → 100점). 최근 90일 투자의견 상향 1건당 +5점, 하향 1건당 -5점 가감<br>
+      &nbsp;&nbsp;· 목표가 괴리 — 가중치 {{ method.gap_w }}: 평균 목표가가 현재가보다 높을수록(상승 여력) 고득점 (-20% 이하 → 0점, 현재가와 같으면 33점, +40% 이상 → 100점). 단, 목표가가 없는 종목은 중립 50점<br>
+      &nbsp;&nbsp;· 뉴스 감성 — 가중치 {{ method.news_w }}: 최근 뉴스 제목에서 긍정 키워드(상승·호재·목표가 상향 등)가 부정 키워드보다 많을수록 고득점. 뉴스가 없으면 중립 50점<br>
+      &nbsp;&nbsp;· 시장 모멘텀 — 가중치 {{ method.sector_w }}: 같은 시장 전체의 평균 20일 수익률이 높을수록 고득점 (-10% → 0점, +10% → 100점)<br>
       <b>3. 종합 점수</b> = 기술적 점수 × {{ method.tech_ratio_pct }}% + 기본적 점수 × {{ method.fund_ratio_pct }}%<br>
-      &nbsp;&nbsp;※ 데이터가 없는 항목은 중립값(50점)으로 처리되며, 종목 간 비교 가능하도록 모든 점수는 0~100으로 정규화됩니다.
+      &nbsp;&nbsp;※ 데이터가 없는 항목은 중립값(50점)으로 처리되며, 종목 간 비교 가능하도록 모든 점수는 0~100으로 정규화됩니다.<br>
+      <b>4. 추천 순위</b> — 각 국가별 Top 10을 선정하며, 단기와 장기의 기준은 서로 다릅니다.<br>
+      &nbsp;&nbsp;· <b>단기 추천 (단기 점수 순)</b>: RSI(30) + MACD(25) + 20일 이평선 괴리(20) + 볼린저밴드(15) + 거래량 배율(10) — 당장의 매수세와 모멘텀을 봅니다. 예: 거래량이 평소의 2배로 늘며 MACD가 상승 전환한 종목이 고득점<br>
+      &nbsp;&nbsp;· <b>장기 추천 (장기 점수 순)</b>: 60일 이평선 대비 위치(40%) + 60일 수익률(40%) + 추세 전환(20%)으로, <b>모두 높을수록 고득점</b>입니다. 예: 60일 수익률 -30% 이하 → 0점, 0% → 50점, +30% 이상 → 100점. 즉 이미 오른 종목일수록(추세 추종) 유리하며, 하락 중인 종목은 '싸다'는 이유만으로는 추천되지 않습니다<br>
+      &nbsp;&nbsp;※ 카드 우측 상단 숫자가 그 섹션의 순위 기준 점수이며, 종합 점수는 카드 본문에 별도 표기됩니다.
     </div>
   </div>
 

@@ -53,31 +53,41 @@ def _build_prompt(rec: dict, horizon: str) -> str:
     )
 
 
-def _call_groq(prompt: str, api_key: str, timeout: int = 30) -> str | None:
-    try:
-        resp = requests.post(
-            API_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.4,
-                "max_tokens": 300,
-            },
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        logger.warning("Groq commentary call failed: %s", e)
-        return None
+def _call_groq(prompt: str, api_key: str, timeout: int = 30, max_retries: int = 3) -> str | None:
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.post(
+                API_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.4,
+                    "max_tokens": 300,
+                },
+                timeout=timeout,
+            )
+            if resp.status_code == 429:
+                retry_after = float(resp.headers.get("Retry-After", 20))
+                wait = min(retry_after, 60) * (attempt + 1)
+                logger.info("Groq rate limited; waiting %.0fs (attempt %d)", wait, attempt + 1)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            logger.warning("Groq commentary call failed: %s", e)
+            return None
+    logger.warning("Groq call gave up after retries (rate limit)")
+    return None
 
 
-def generate_commentary(picks: dict, sleep_sec: float = 0.5) -> dict:
+def generate_commentary(picks: dict, sleep_sec: float = 2.2) -> dict:
     """
     Generate AI commentary for all per-country picks.
     picks: {"short": {country: df}, "long": {country: df}, ...}
     Returns {(ticker, horizon): commentary_text}. Empty dict when unavailable.
+    sleep_sec: Groq free tier is 30 RPM for llama-3.3-70b — keep ~25 RPM max.
     """
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:

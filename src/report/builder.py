@@ -101,8 +101,22 @@ def _attach_reasons(df: pd.DataFrame, horizon: str, commentary: dict | None = No
 COUNTRY_LABELS = {"KR": "한국", "US": "미국", "JP": "일본"}
 
 SECTION_META = [
-    {"key": "short", "title": "단기 추천", "subtitle": "수 일 ~ 수 주", "color": "#d32f2f", "head_bg": "#faf5f5"},
-    {"key": "long", "title": "장기 추천", "subtitle": "2~3년", "color": "#2e7d32", "head_bg": "#f4faf4"},
+    {
+        "key": "short",
+        "title": "단기 추천",
+        "subtitle": "수 일 ~ 수 주",
+        "color": "#d32f2f",
+        "head_bg": "#faf5f5",
+        "criteria": "선정 기준: 단기 점수 순 — RSI·MACD·20일 이평선·볼린저밴드·거래량 급증 등 단기 모멘텀 지표 중심",
+    },
+    {
+        "key": "long",
+        "title": "장기 추천",
+        "subtitle": "2~3년",
+        "color": "#2e7d32",
+        "head_bg": "#f4faf4",
+        "criteria": "선정 기준: 장기 점수 순 — 60일 이평선 추세·60일 수익률·목표가 괴리·IB 컨센서스 등 장기 추세/펀더멘털 중심",
+    },
 ]
 
 

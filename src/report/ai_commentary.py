@@ -53,7 +53,7 @@ def _build_prompt(rec: dict, horizon: str) -> str:
     )
 
 
-def _call_groq(prompt: str, api_key: str, timeout: int = 30, max_retries: int = 3) -> str | None:
+def _call_groq(prompt: str, api_key: str, timeout: int = 30, max_retries: int = 2) -> str | None:
     for attempt in range(max_retries + 1):
         try:
             resp = requests.post(
@@ -68,8 +68,8 @@ def _call_groq(prompt: str, api_key: str, timeout: int = 30, max_retries: int = 
                 timeout=timeout,
             )
             if resp.status_code == 429:
-                retry_after = float(resp.headers.get("Retry-After", 20))
-                wait = min(retry_after, 60) * (attempt + 1)
+                retry_after = float(resp.headers.get("Retry-After", 10))
+                wait = min(retry_after, 15) * (attempt + 1)
                 logger.info("Groq rate limited; waiting %.0fs (attempt %d)", wait, attempt + 1)
                 time.sleep(wait)
                 continue
@@ -82,12 +82,18 @@ def _call_groq(prompt: str, api_key: str, timeout: int = 30, max_retries: int = 
     return None
 
 
-def generate_commentary(picks: dict, sleep_sec: float = 2.2) -> dict:
+def generate_commentary(
+    picks: dict,
+    sleep_sec: float = 2.2,
+    max_per_group: int = 5,
+    time_budget_sec: int = 360,
+) -> dict:
     """
-    Generate AI commentary for all per-country picks.
+    Generate AI commentary for the top picks of each country group.
     picks: {"short": {country: df}, "long": {country: df}, ...}
+    Only the top max_per_group stocks per group get commentary (Groq free
+    tier is 30 RPM), and generation stops when time_budget_sec is exceeded.
     Returns {(ticker, horizon): commentary_text}. Empty dict when unavailable.
-    sleep_sec: Groq free tier is 30 RPM for llama-3.3-70b — keep ~25 RPM max.
     """
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
@@ -98,15 +104,19 @@ def generate_commentary(picks: dict, sleep_sec: float = 2.2) -> dict:
     seen = set()
     for horizon in ("short", "long"):
         for country, df in picks.get(horizon, {}).items():
-            for rec in df.to_dict("records"):
+            for rec in df.head(max_per_group).to_dict("records"):
                 key = (rec.get("ticker"), horizon)
                 if key not in seen:
                     seen.add(key)
                     tasks.append((key, rec, horizon))
 
     logger.info("Generating AI commentary for %d stock-horizon pairs", len(tasks))
+    started = time.monotonic()
     out = {}
     for key, rec, horizon in tasks:
+        if time.monotonic() - started > time_budget_sec:
+            logger.warning("AI commentary time budget exceeded; stopping with %d/%d", len(out), len(tasks))
+            break
         text = _call_groq(_build_prompt(rec, horizon), api_key)
         if text:
             out[key] = text

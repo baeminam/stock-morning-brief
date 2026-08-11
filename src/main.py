@@ -161,7 +161,7 @@ def run(send_email: bool = False, news_max_tickers: int = 50, config_path: str |
     pdf_path = build_pdf(report_path)
 
     if send_email:
-        subject = f"[일일 종목 분석 리포트] {datetime.today().strftime('%Y-%m-%d')}"
+        subject = f"[MONEYTREND 일일 종목 분석 리포트] {datetime.today().strftime('%Y-%m-%d')}"
         text_body = build_text_report(picks, universe_notes=universe_notes, commentary=commentary)
         attachments = [pdf_path] if pdf_path else []
         return send_report_email(subject, html, recipients=_load_recipients(), text_body=text_body, attachments=attachments)

@@ -162,7 +162,7 @@ def _build_methodology(scoring_config: dict) -> dict:
 
 def build_text_report(picks: dict, universe_notes: list[str] | None = None, commentary: dict | None = None) -> str:
     """Plain-text fallback version of the report (for mail clients without HTML)."""
-    lines = [f"일일 종목 분석 리포트 ({datetime.today().strftime('%Y-%m-%d')})", ""]
+    lines = [f"[MONEYTREND] 일일 종목 분석 리포트 ({datetime.today().strftime('%Y-%m-%d')})", ""]
     if universe_notes:
         lines.append("[분석 대상]")
         lines.extend(f"- {n}" for n in universe_notes)

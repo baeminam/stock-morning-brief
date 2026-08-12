@@ -2,8 +2,9 @@ name: Morning Stock Brief
 
 on:
   schedule:
-    # KST 08:00 == UTC 23:00 (previous day)
-    - cron: '0 23 * * *'
+    # 목표 수신 08:00 KST. GitHub cron은 수 분~1시간 지연될 수 있어
+    # 06:37 KST(= 21:37 UTC, 전날)에 예약해 지연 여유를 둠. 정각(:00) 회피.
+    - cron: '37 21 * * *'
   workflow_dispatch:
 
 jobs:
